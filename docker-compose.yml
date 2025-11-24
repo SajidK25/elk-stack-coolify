@@ -1,0 +1,69 @@
+services:
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:9.2.1
+    container_name: elasticsearch
+    environment:
+      - node.name=es01
+      - cluster.name=elk-cluster
+      - discovery.type=single-node
+      - bootstrap.memory_lock=true
+      - ES_JAVA_OPTS=-Xms1g -Xmx1g
+      - xpack.security.enabled=false
+      - xpack.security.http.ssl.enabled=false
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+    volumes:
+      - es-data:/usr/share/elasticsearch/data
+      # - ./elasticsearch/elasticsearch.yml:/usr/share/elasticsearch/config/elasticsearch.yml:ro
+    ports:
+      - "9201:9200"
+    networks:
+      - elk
+
+  kibana:
+    image: docker.elastic.co/kibana/kibana:9.2.1
+    container_name: kibana
+    depends_on:
+      - elasticsearch
+    environment:
+      - ELASTICSEARCH_HOSTS=http://elasticsearch:9200
+    ports:
+      - "5602:5601"
+    volumes:
+      - ./config/kibana/kibana.yml:/usr/share/kibana/config/kibana.yml:ro
+    networks:
+      - elk
+
+  logstash:
+    image: docker.elastic.co/logstash/logstash:9.2.1
+    container_name: logstash
+    depends_on:
+      - elasticsearch
+    ports:
+      - "5045:5044"
+    volumes:
+      - ./config/logstash/logstash.conf:/usr/share/logstash/pipeline/logstash.conf:ro
+      - ./config/logstash/logstash.yml:/usr/share/logstash/config/logstash.yml:ro
+    networks:
+      - elk
+
+  filebeat:
+    build: ./filebeat
+    container_name: filebeat
+    user: root
+    depends_on:
+      - logstash
+    volumes:
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks:
+      - elk
+
+networks:
+  elk:
+    driver: bridge
+
+volumes:
+  es-data:
