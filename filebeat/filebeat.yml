@@ -12,17 +12,11 @@ filebeat.inputs:
 processors:
   - add_docker_metadata: ~
 
-output.elasticsearch:
-  hosts: ["https://elasticsearch:9200"]
-  username: elastic
-  password: changeme123
+# Output to Logstash instead of ES
+output.logstash:
+  hosts: ["logstash:5044"]
   ssl:
+    enabled: true
     certificate_authorities: ["/usr/share/filebeat/certs/ca/ca.crt"]
 
-setup.kibana:
-  host: "https://kibana:5601"
-  ssl:
-    certificate_authorities: ["/usr/share/filebeat/certs/ca/ca.crt"]
-
-# Auto-create dashboards (optional but nice)
-setup.dashboards.enabled: true
+# No setup.kibana needed since we're not loading dashboards here (do it manually if wanted)
