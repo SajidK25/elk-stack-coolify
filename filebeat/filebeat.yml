@@ -1,0 +1,28 @@
+filebeat.inputs:
+  - type: container
+    paths:
+      - '/var/lib/docker/containers/*/*.log'
+
+  # Example: collect your custom app logs
+  - type: log
+    enabled: true
+    paths:
+      - /var/log/apps/*.log
+
+processors:
+  - add_docker_metadata: ~
+
+output.elasticsearch:
+  hosts: ["https://elasticsearch:9200"]
+  username: elastic
+  password: changeme123
+  ssl:
+    certificate_authorities: ["/usr/share/filebeat/certs/ca/ca.crt"]
+
+setup.kibana:
+  host: "https://kibana:5601"
+  ssl:
+    certificate_authorities: ["/usr/share/filebeat/certs/ca/ca.crt"]
+
+# Auto-create dashboards (optional but nice)
+setup.dashboards.enabled: true

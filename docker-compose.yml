@@ -1,69 +1,105 @@
+version: '3.8'
+
 services:
+  setup:
+    image: docker.elastic.co/elasticsearch:9.0.3
+    user: "0"
+    volumes:
+      - ./certs:/certs
+    command: >
+      bash -c '
+        if [ ! -f /certs/bundle.zip ]; then
+          echo "Creating certs..."
+          bin/elasticsearch-certutil ca --pem --silent --out /certs/bundle.zip
+          unzip /certs/bundle.zip -d /certs
+          bin/elasticsearch-certutil cert --silent --ca-cert /certs/ca/ca.crt --ca-key /certs/ca/ca.key --out /certs/bundle.zip
+          unzip -o /certs/bundle.zip -d /certs
+          chown -R 1000:0 /certs
+        fi
+      '
+    networks:
+      - elk
+
   elasticsearch:
-    image: docker.elastic.co/elasticsearch/elasticsearch:9.2.1
+    image: docker.elastic.co/elasticsearch:9.0.3
     container_name: elasticsearch
     environment:
       - node.name=es01
-      - cluster.name=elk-cluster
+      - cluster.name=docker-cluster
       - discovery.type=single-node
-      - bootstrap.memory_lock=true
-      - ES_JAVA_OPTS=-Xms1g -Xmx1g
-      - xpack.security.enabled=false
-      - xpack.security.http.ssl.enabled=false
-    ulimits:
-      memlock:
-        soft: -1
-        hard: -1
+      - ELASTIC_PASSWORD=changeme123          # ← Change this!
+      - xpack.security.enabled=true
+      - xpack.security.http.ssl.enabled=true
+      - xpack.security.http.ssl.key=/certs/es01/es01.key
+      - xpack.security.http.ssl.certificate=/certs/es01/es01.crt
+      - xpack.security.http.ssl.certificate_authorities=/certs/ca/ca.crt
+      - xpack.security.transport.ssl.enabled=true
+      - xpack.security.transport.ssl.verification_mode=certificate
+      - xpack.security.transport.ssl.key=/certs/es01/es01.key
+      - xpack.security.transport.ssl.certificate=/certs/es01/es01.crt
+      - xpack.security.transport.ssl.certificate_authorities=/certs/ca/ca.crt
     volumes:
-      - es-data:/usr/share/elasticsearch/data
-      # - ./elasticsearch/elasticsearch.yml:/usr/share/elasticsearch/config/elasticsearch.yml:ro
+      - ./data/esdata:/usr/share/elasticsearch/data
+      - ./certs:/certs:ro
     ports:
-      - "9201:9200"
+      - "9200:9200"
     networks:
       - elk
+    healthcheck:
+      test: ["CMD", "curl", "-f", "-u", "elastic:changeme123", "https://localhost:9200"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
 
   kibana:
-    image: docker.elastic.co/kibana/kibana:9.2.1
+    image: docker.elastic.co/kibana/kibana:9.0.3
     container_name: kibana
     depends_on:
-      - elasticsearch
+      elasticsearch:
+        condition: service_healthy
     environment:
-      - ELASTICSEARCH_HOSTS=http://elasticsearch:9200
-    ports:
-      - "5602:5601"
+      - ELASTICSEARCH_HOSTS=https://elasticsearch:9200
+      - ELASTICSEARCH_USERNAME=elastic
+      - ELASTICSEARCH_PASSWORD=changeme123
+      - ELASTICSEARCH_SSL_CERTIFICATEAUTHORITIES=/usr/share/kibana/config/certs/ca/ca.crt
+      - SERVER_PUBLICBASEURL=https://kibana.yourdomain.com   # ← Change to your domain
+      - XPACK_ENCRYPTEDSAVEDOBJECTS_ENCRYPTIONKEY=abcd1234abcd1234abcd1234abcd1234  # minimum 32 chars
+      - XPACK_REPORTING_ENCRYPTIONKEY=abcd5678abcd5678abcd5678abcd5678
+      - XPACK_SECURITY_ENCRYPTIONKEY=abcd9012abcd9012abcd9012abcd9012
     volumes:
-      - ./config/kibana/kibana.yml:/usr/share/kibana/config/kibana.yml:ro
+      - ./certs/ca/ca.crt:/usr/share/kibana/config/certs/ca/ca.crt:ro
+      - ./kibana/kibana.yml:/usr/share/kibana/config/kibana.yml:ro
+    ports:
+      - "5601:5601"
     networks:
       - elk
-
-  logstash:
-    image: docker.elastic.co/logstash/logstash:9.2.1
-    container_name: logstash
-    depends_on:
-      - elasticsearch
-    ports:
-      - "5045:5044"
-    volumes:
-      - ./config/logstash/logstash.conf:/usr/share/logstash/pipeline/logstash.conf:ro
-      - ./config/logstash/logstash.yml:/usr/share/logstash/config/logstash.yml:ro
-    networks:
-      - elk
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5601/api/status"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
 
   filebeat:
-    build: ./filebeat
+    image: docker.elastic.co/beats/filebeat:9.0.3
     container_name: filebeat
     user: root
     depends_on:
-      - logstash
+      elasticsearch:
+        condition: service_healthy
+      kibana:
+        condition: service_healthy
     volumes:
+      - ./filebeat/filebeat.yml:/usr/share/filebeat/filebeat.yml:ro
+      - ./filebeat/logs:/var/log/apps:ro          # ← put your app logs here
       - /var/lib/docker/containers:/var/lib/docker/containers:ro
       - /var/run/docker.sock:/var/run/docker.sock:ro
     networks:
       - elk
+    command: ["--strict.perms=false"]
 
 networks:
   elk:
     driver: bridge
 
 volumes:
-  es-data:
+  esdata:
