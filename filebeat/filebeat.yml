@@ -1,14 +1,17 @@
 filebeat.inputs:
-  - type: container
+  - type: filestream
+    id: docker-logs
     enabled: true
     paths:
       - /var/lib/docker/containers/*/*.log
+    parsers:
+      - container: ~
 
 processors:
   - add_docker_metadata: ~
 
-output.elasticsearch:
-  hosts: [ http://elasticsearch:9200 ]
+output.logstash:
+  hosts: ["logstash:5044"]
 
 setup.kibana:
   host: "kibana:5601"
