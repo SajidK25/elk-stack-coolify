@@ -18,7 +18,7 @@ services:
       - es-data:/usr/share/elasticsearch/data
       # - ./elasticsearch/elasticsearch.yml:/usr/share/elasticsearch/config/elasticsearch.yml:ro
     ports:
-      - "9201:9200"
+      - "9200:9200"
     networks:
       - elk
 
@@ -30,7 +30,7 @@ services:
     environment:
       - ELASTICSEARCH_HOSTS=http://elasticsearch:9200
     ports:
-      - "5602:5601"
+      - "5601:5601"
     volumes:
       - ./config/kibana/kibana.yml:/usr/share/kibana/config/kibana.yml:ro
     networks:
@@ -42,7 +42,7 @@ services:
     depends_on:
       - elasticsearch
     ports:
-      - "5045:5044"
+      - "5044:5044"
     volumes:
       - ./config/logstash/logstash.conf:/usr/share/logstash/pipeline/logstash.conf:ro
       - ./config/logstash/logstash.yml:/usr/share/logstash/config/logstash.yml:ro
